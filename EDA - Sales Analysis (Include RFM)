@@ -1,0 +1,194 @@
+-- importing data
+select * 
+from dbo.sales_data_sample
+;
+
+-- checking unique value
+select distinct STATUS
+from dbo.sales_data_sample;
+
+select distinct YEAR_ID
+from dbo.sales_data_sample;
+
+select distinct PRODUCTLINE 
+from dbo.sales_data_sample;
+
+select distinct COUNTRY 
+from dbo.sales_data_sample;
+
+select distinct TERRITORY
+from dbo.sales_data_sample;
+
+select distinct DEALSIZE
+from dbo.sales_data_sample;
+
+-- The product that sell the most
+select
+  productcode,
+  productline,
+  sum(sales) as revenue
+from dbo.sales_data_sample
+group by PRODUCTCODE, PRODUCTLINE
+order by 3 desc
+
+select
+  productline,
+  sum(sales) as revenue
+from dbo.sales_data_sample
+group by PRODUCTLINE
+order by 2 desc
+
+-- Highest revenue
+select
+  YEAR_ID,
+  sum(sales) as revenue
+from dbo.sales_data_sample
+group by YEAR_ID
+order by 2 desc 
+-- NOTE: In 2005, there is only 5 months records.
+
+select
+  DEALSIZE,
+  sum(sales) as revenue
+from dbo.sales_data_sample
+group by DEALSIZE
+order by 2 desc
+
+select
+  COUNTRY,
+  sum(sales) as revenue
+from dbo.sales_data_sample
+group by COUNTRY
+order by 2 desc
+
+-- what is the best month for sales in specific year?
+-- 2003
+select
+  MONTH_ID,
+  sum(sales) as revenue,
+  count(ordernumber) as frequency
+from dbo.sales_data_sample
+where YEAR_ID = 2003
+group by MONTH_ID
+order by 2 desc
+--November is the best month
+
+-- what is the best month for sales in specific year?
+-- 2004
+select
+  MONTH_ID,
+  sum(sales) as revenue,
+  count(ordernumber) as frequency
+from dbo.sales_data_sample
+where YEAR_ID = 2004
+group by MONTH_ID
+order by 2 desc
+--November is the best month
+
+-- what is the best month for sales in specific year?
+-- 2005
+select
+  MONTH_ID,
+  sum(sales) as revenue,
+  count(ordernumber) as frequency
+from dbo.sales_data_sample
+where YEAR_ID = 2005
+group by MONTH_ID
+order by 2 desc
+--In here, we dont have complete data, so May is the best month so far
+
+-- November seems to be the best month, what product do they sell in November?
+select
+  MONTH_ID,
+  PRODUCTLINE,
+  sum(sales) as revenue,
+  count(ordernumber) as frequency
+from dbo.sales_data_sample
+where YEAR_ID in (2003, 2004) and MONTH_ID = 11
+group by MONTH_ID, PRODUCTLINE
+order by 3 desc
+
+-- Calculate RFM and make segment markets
+drop table if exists #rfm;
+with rfm as
+(
+select CUSTOMERNAME,
+	max(orderdate) as last_order_date,
+	(select max(orderdate) from dbo.sales_data_sample) as max_order_date,
+	datediff(DD, max(orderdate), (select max(orderdate) from dbo.sales_data_sample)) as recency,
+	count(ordernumber) as frequency,
+	sum(sales) as total_monetary,
+	avg(sales) as avg_monetary
+from dbo.sales_data_sample
+where status <> 'Cancelled'
+group by CUSTOMERNAME
+),
+rfm_score as
+(
+select rfm.*,
+ntile(4) over (order by recency desc) as rfm_recency,
+ntile(4) over (order by frequency) as rfm_frequency,
+ntile(4) over (order by total_monetary) as rfm_monetary
+from rfm
+)
+
+select rfm_score.*, 
+(rfm_recency + rfm_frequency + rfm_monetary) as total_rfm,
+cast(rfm_recency as varchar) + cast(rfm_frequency as varchar) + cast(rfm_monetary as varchar) as rfm_value
+into #rfm
+from rfm_score
+
+select distinct customername, rfm_value, rfm_recency, rfm_frequency, rfm_monetary,
+case when rfm_value in (111, 112, 121, 122, 211, 212, 221, 222) then 'lost customers'
+	 when rfm_value in (133, 134, 144, 233, 243, 244, 333, 334, 343, 344) then 'slipping away, cannot lose'
+	 when rfm_value in (311, 312, 411) then 'new customers'
+	 when rfm_value in (123, 132, 223, 232, 321, 322) then 'potential churners'
+	 when rfm_value in (332, 421, 422, 432) then 'active'
+	 when rfm_value in (423, 433, 434, 443, 444) then 'loyal'
+end rfm_segment
+from #rfm
+--where CUSTOMERNAME in ('Scandinavian Gift Ideas', 'Land of Toys Inc.', 'UK Collectables, Ltd.', 'Euro Shopping Channel')
+
+-- About order canceled
+select ORDERDATE, count(ordernumber) as ordercanceled
+from dbo.sales_data_sample
+where status = 'Cancelled'
+group by ORDERDATE
+
+select *
+from dbo.sales_data_sample
+where status = 'Cancelled'
+order by ORDERDATE
+
+select customername, orderdate, dealsize, sum(quantityordered) as quantityordered, sum(sales) as sales
+from dbo.sales_data_sample
+where status = 'Cancelled'
+group by CUSTOMERNAME, ORDERDATE, DEALSIZE
+order by ORDERDATE
+
+select *
+from dbo.sales_data_sample
+where CUSTOMERNAME = 'Scandinavian Gift Ideas'
+order by orderdate
+
+select *
+from dbo.sales_data_sample
+where CUSTOMERNAME = 'Land of Toys Inc.'
+order by orderdate
+
+select *
+from dbo.sales_data_sample
+where CUSTOMERNAME = 'UK Collectables, Ltd.'
+order by orderdate
+
+select *
+from dbo.sales_data_sample
+where CUSTOMERNAME = 'Euro Shopping Channel'
+order by orderdate
+
+-- dealsize large dari negara mana
+select city, country, sum(sales) as total_sales
+from dbo.sales_data_sample
+where dealsize = 'Large'
+group by city, country
+order by 3 desc
