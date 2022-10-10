@@ -1,0 +1,183 @@
+-----COVID DEATHS-----
+
+
+SELECT *
+FROM [Portofolio Covid]..covidDeaths
+
+SELECT *
+FROM [Portofolio Covid]..covidDeaths
+WHERE location = 'Low income'
+
+SELECT
+  location,
+  date,
+  total_cases,
+  new_cases,
+  total_deaths,
+  population
+FROM [Portofolio Covid]..covidDeaths
+ORDER BY 1, 2
+
+-- Deaths Percentage in Indonesia
+SELECT
+  location,
+  date,
+  total_cases,
+  total_deaths,
+  (total_deaths/total_cases)*100 AS death_percentage
+FROM [Portofolio Covid]..covidDeaths
+WHERE location = 'Indonesia'
+ORDER BY 1, 2
+
+-- Cases Percentage
+SELECT
+  location,
+  date,
+  population,
+  total_cases,
+  (total_cases/population)*100 AS cases_percentage
+FROM [Portofolio Covid]..covidDeaths
+WHERE location = 'Indonesia'
+ORDER BY 1, 2
+
+
+SELECT
+  location,
+  population,
+  MAX(total_cases) AS highest_infection_count,
+  MAX(total_cases/population)*100 AS cases_percentage
+FROM [Portofolio Covid]..covidDeaths
+GROUP BY location, population
+ORDER BY cases_percentage DESC
+
+SELECT
+  location,
+  MAX(CAST(total_deaths AS INT)) AS total_death_count
+FROM [Portofolio Covid]..covidDeaths
+WHERE continent not in ('')
+GROUP BY location
+ORDER BY total_death_count DESC
+
+SELECT
+  location, 
+  MAX(CAST(total_deaths AS INT)) AS total_death_count
+FROM [Portofolio Covid]..covidDeaths
+WHERE continent in ('') AND location NOT IN ('Upper middle income', 'High income', 'Lower middle income', 'Low income')
+GROUP BY location
+ORDER BY total_death_count DESC
+
+
+SELECT
+  SUM(new_cases) AS total_cases, 
+	SUM(CAST(new_deaths AS INT)) AS total_deaths, 
+	SUM(CAST(new_deaths as INT))/SUM(new_cases) AS deaths_percentage
+FROM [Portofolio Covid]..covidDeaths
+
+
+-----COVID VACCINATIONS-----
+
+
+SELECT *
+FROM covidVaccinations
+
+SELECT *
+FROM covidDeaths dea
+JOIN covidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+
+SELECT
+  dea.location,
+  dea.date,
+  dea.population,
+  vac.new_vaccinations
+FROM covidDeaths dea
+JOIN covidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent <> '' and vac.new_vaccinations <> ''
+ORDER BY 1, 2
+
+SELECT
+  dea.location,
+  dea.date,
+  dea.population,
+  vac.new_vaccinations,
+	SUM(CAST(vac.new_vaccinations AS FLOAT))
+    OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) 
+    AS people_vaccinated
+FROM covidDeaths dea
+JOIN covidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent <> '' AND vac.new_vaccinations <> ''
+ORDER BY 1, 2
+
+WITH pop_vs_vac (location, date, population, new_vaccinations, people_vaccinated)
+AS (
+SELECT
+  dea.location,
+  dea.date,
+  dea.population,
+  vac.new_vaccinations,
+	SUM(CAST(vac.new_vaccinations AS FLOAT))
+    OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date)
+    AS people_vaccinated
+FROM covidDeaths dea
+JOIN covidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent <> '' AND vac.new_vaccinations <> ''
+)
+
+SELECT
+  *,
+  (people_vaccinated/population)*100 AS vaccinated_persentage
+FROM pop_vs_vac
+WHERE location = 'Indonesia'
+GROUP BY location
+
+DROP TABLE IF EXISTS #PercentPopulationVaccinated
+CREATE TABLE #PercentPopulationVaccinated
+(
+location NVARCHAR(255),
+date DATETIME,
+population NUMERIC,
+new_vaccinations FLOAT,
+people_vaccinated NUMERIC
+)
+
+INSERT INTO #PercentPopulationVaccinated
+SELECT
+  dea.location,
+  dea.date,
+  dea.population,
+  vac.new_vaccinations,
+	SUM(CAST(vac.new_vaccinations AS FLOAT))
+    OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date)
+    AS people_vaccinated
+FROM covidDeaths dea
+join covidVaccinations vac
+	on dea.location = vac.location
+	and dea.date = vac.date
+
+SELECT
+  *,
+  (people_vaccinated/population)*100 AS vaccinated_persentage
+FROM #PercentPopulationVaccinated
+WHERE location = 'Indonesia'
+
+CREATE VIEW PercentPopulationVaccinated as
+SELECT 
+  dea.location, 
+	dea.date, 
+	dea.population, 
+	vac.new_vaccinations,
+	SUM(CAST(vac.new_vaccinations AS FLOAT))
+	  OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date)
+		AS people_vaccinated
+FROM covidDeaths dea
+JOIN covidVaccinations vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent <> ''
