@@ -1,0 +1,137 @@
+
+create view lego_sets as
+
+select
+  s.set_num,
+  s.name as set_name, 
+  s.year, s.theme_id,
+  cast(s.num_parts as numeric) num_parts,
+  t.name as theme_name,
+  t.parent_id,
+  p.name as parent_theme_name
+from sets s
+left join themes t
+	on s.theme_id = t.id
+left join themes p
+	on t.parent_id = p.id
+
+select * from lego_sets
+
+--- what is the total number of parts per theme
+
+-- total number of parts per theme
+-- without considering the parent_theme
+select
+  theme_name,
+  sum(num_parts) as total_num_parts
+from lego_sets
+group by theme_name
+order by 2 desc
+
+-- total number of parts per theme
+-- with considering the parent_theme
+select
+  theme_name,
+  parent_theme_name,
+  sum(num_parts) as total_num_parts
+from lego_sets
+where parent_theme_name is not null
+group by theme_name, parent_theme_name
+order by 3 desc
+
+
+--- what is the total number of parts per year
+
+-- total number of parts per year
+-- without considering the parent_theme
+select 
+  year,
+  sum(num_parts) as total_num_parts
+from lego_sets
+group by year
+order by 2 desc
+
+-- total number of parts per year
+-- with considering the parent_theme
+select
+  year,
+  sum(num_parts) as total_num_parts
+from lego_sets
+where parent_theme_name is not null
+group by year
+order by 2 desc
+
+
+--- how many sets release in each century
+select
+  century,
+  count(set_num) as total_sets
+from lego_sets
+group by century
+--order by 2 desc
+
+
+--- what percentage of sets released in the 21st century were "Trains" themed
+with cte1 as (
+	select
+    theme_name,
+		count(set_num) as sets_per_theme
+	from lego_sets
+	where century = '21st_century'
+	group by theme_name
+),
+	   cte2 as (
+	select
+    theme_name,
+		sets_per_theme,
+		sum(sets_per_theme) over() as total_sets,
+		cast(1.00 * sets_per_theme / sum(sets_per_theme)
+      over() as decimal (7,6)) * 100
+      as percentage_sets_per_theme
+	from cte1
+	--group by theme_name
+)
+
+select
+  sum(percentage_sets_per_theme) as total_percentage_train_set
+from cte2
+where theme_name like '%train%'
+
+
+
+--- what was the popular theme by year in the 21st century
+select
+  year,
+  theme_name, 
+  total_sets
+from (
+	select 
+    year,
+    theme_name, 
+    count(set_num) as total_sets,
+    row_number()
+      over (partition by year order by count(set_num) desc)
+      as rn
+	from lego_sets
+	where century = '21st_century'
+	group by year, theme_name) x
+where rn = 1
+order by 1
+
+
+--- what is the most produced color of lego in terms of quantity of parts
+select
+  color_name,
+  sum(quantity) as quantity_of_parts
+from (
+	select
+    i.part_num,
+    i.color_id,
+    cast(i.quantity as numeric) as quantity,
+    c.name as color_name
+	from inventory_parts i
+	inner join colors c
+		on i.color_id = c.id
+) x
+group by color_name
+order by 2 desc
